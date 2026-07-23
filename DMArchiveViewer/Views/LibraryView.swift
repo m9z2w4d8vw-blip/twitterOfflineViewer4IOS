@@ -11,6 +11,9 @@ struct LibraryView: View {
     @State private var searchText = ""
     @Environment(\.scenePhase) private var scenePhase
 
+    // Same key SettingsView's "App Name" field writes to.
+    @AppStorage("appDisplayName") private var appDisplayName: String = "DM Offline Archive"
+
     private let importTypes: [UTType] = [.json, .plainText, .data, .item]
 
     private var filtered: [ConversationMeta] {
@@ -28,7 +31,7 @@ struct LibraryView: View {
                     list
                 }
             }
-            .navigationTitle("DM Offline Archive")
+            .navigationTitle(appDisplayName)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 16) {
