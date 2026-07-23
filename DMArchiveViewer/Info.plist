@@ -22,6 +22,16 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Makes this app's Documents folder show up as a browsable folder
+	     named "DM Archive" under Files app → On My iPhone — the person
+	     can then drag/copy/paste an export .json directly into it,
+	     bypassing the system file-import picker entirely. Added because
+	     that picker's import callback wasn't reliably firing in a
+	     sideloaded install. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
