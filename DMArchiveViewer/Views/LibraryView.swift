@@ -133,7 +133,7 @@ struct LibraryView: View {
         .padding(.vertical, 4)
     }
 
-private func handleImportResult(_ result: Result<[URL], Error>) {
+    private func handleImportResult(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
             DebugLog.shared.log(
@@ -157,12 +157,6 @@ private func handleImportResult(_ result: Result<[URL], Error>) {
                 }
                 isImporting = false
             }
-        case .failure(let error):
-            DebugLog.shared.log("import", "File picker returned an error", detail: error.localizedDescription)
-            importErrorMessage = error.localizedDescription
-        }
-    }
-}
         case .failure(let error):
             DebugLog.shared.log("import", "File picker returned an error", detail: error.localizedDescription)
             importErrorMessage = error.localizedDescription
