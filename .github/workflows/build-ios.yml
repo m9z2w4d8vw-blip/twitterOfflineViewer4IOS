@@ -1,0 +1,73 @@
+name: Build iOS App
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "DMArchiveViewer/**"
+      - "project.yml"
+      - ".github/workflows/build-ios.yml"
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      # Building unsigned for a real device architecture (iphoneos, not
+      # the simulator) is deliberate: this is the shape a sideloading
+      # tool like AltStore/SideStore expects to re-sign and install with
+      # your own free Apple ID. It is NOT something that can be
+      # installed straight onto an iPhone as-is — see the repo README
+      # for what actually happens after this artifact is downloaded.
+      - name: Build (unsigned, device architecture)
+        run: |
+          xcodebuild \
+            -project DMArchiveViewer.xcodeproj \
+            -scheme DMArchiveViewer \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            clean build
+
+      - name: Locate built .app
+        id: find_app
+        run: |
+          APP_PATH=$(find build/Build/Products -maxdepth 2 -name "*.app" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found — build failed. Check the build step's log above." >&2
+            exit 1
+          fi
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Package as unsigned .ipa
+        run: |
+          mkdir -p ipa_build/Payload
+          cp -r "${{ steps.find_app.outputs.app_path }}" ipa_build/Payload/
+          cd ipa_build
+          zip -r -q ../DMArchiveViewer-unsigned.ipa Payload
+
+      - name: Upload .ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DMArchiveViewer-unsigned-ipa
+          path: DMArchiveViewer-unsigned.ipa
+          retention-days: 14
