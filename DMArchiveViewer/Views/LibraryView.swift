@@ -133,21 +133,36 @@ struct LibraryView: View {
         .padding(.vertical, 4)
     }
 
-    private func handleImportResult(_ result: Result<[URL], Error>) {
+private func handleImportResult(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
-            guard !urls.isEmpty else { return }
+            DebugLog.shared.log(
+                "import",
+                "File picker returned successfully",
+                detail: "\(urls.count) file(s): \(urls.map(\.lastPathComponent).joined(separator: ", "))"
+            )
+            guard !urls.isEmpty else {
+                DebugLog.shared.log("import", "Picker returned zero URLs — nothing to import, and nothing else will happen")
+                return
+            }
             isImporting = true
             Task {
                 for url in urls {
                     do {
                         try await store.importFile(at: url)
                     } catch {
+                        DebugLog.shared.log("import", "importFile threw", detail: error.localizedDescription)
                         importErrorMessage = error.localizedDescription
                     }
                 }
                 isImporting = false
             }
+        case .failure(let error):
+            DebugLog.shared.log("import", "File picker returned an error", detail: error.localizedDescription)
+            importErrorMessage = error.localizedDescription
+        }
+    }
+}
         case .failure(let error):
             DebugLog.shared.log("import", "File picker returned an error", detail: error.localizedDescription)
             importErrorMessage = error.localizedDescription
