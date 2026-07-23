@@ -7,6 +7,13 @@ struct MessageRowView: View {
     let onImageTap: (UIImage) -> Void
     var onDoubleTap: (() -> Void)? = nil
 
+    // Same keys the ColorPickers in Settings write to — UserDefaults
+    // keeps everything in sync with no extra plumbing.
+    @AppStorage("senderTextColorHex") private var senderTextColorHex: String = BubbleColorDefaults.senderText
+    @AppStorage("senderBubbleColorHex") private var senderBubbleColorHex: String = BubbleColorDefaults.senderBubble
+    @AppStorage("receiverTextColorHex") private var receiverTextColorHex: String = BubbleColorDefaults.receiverText
+    @AppStorage("receiverBubbleColorHex") private var receiverBubbleColorHex: String = BubbleColorDefaults.receiverBubble
+
     var body: some View {
         if message.isDivider {
             Text(message.text ?? "")
@@ -29,6 +36,9 @@ struct MessageRowView: View {
     // colored frame around a bare photo doesn't read as a real chat
     // bubble the way a padded background behind text does.
     private var isMediaOnly: Bool { !hasText && !mediaList.isEmpty }
+
+    private var textColor: Color { Color(hex: isMe ? senderTextColorHex : receiverTextColorHex) }
+    private var bubbleColor: Color { Color(hex: isMe ? senderBubbleColorHex : receiverBubbleColorHex) }
 
     @ViewBuilder
     private var bubbleRow: some View {
@@ -55,12 +65,12 @@ struct MessageRowView: View {
                     if let time = message.timeLabel, !time.isEmpty {
                         Text(time)
                             .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(isMe ? .white.opacity(0.65) : .secondary)
+                            .foregroundStyle(textColor.opacity(0.65))
                     }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
-                .background(isMe ? Color.accentColor : Color(.systemFill))
+                .background(bubbleColor)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
         }
@@ -106,12 +116,11 @@ struct MessageRowView: View {
 
     @ViewBuilder
     private func messageText(_ text: String) -> some View {
-        let baseColor: Color = isMe ? .white : .primary
         let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty {
-            Text(text).foregroundColor(baseColor)
+            Text(text).foregroundColor(textColor)
         } else {
-            highlighted(text, query: trimmed, baseColor: baseColor)
+            highlighted(text, query: trimmed, baseColor: textColor)
         }
     }
 
