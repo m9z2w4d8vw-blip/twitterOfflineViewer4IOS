@@ -5,6 +5,7 @@ struct LibraryView: View {
     @StateObject private var store = ArchiveStore()
     @State private var showImporter = false
     @State private var showDebugLog = false
+    @State private var showSettings = false
     @State private var importErrorMessage: String?
     @State private var isImporting = false
     @State private var searchText = ""
@@ -30,12 +31,21 @@ struct LibraryView: View {
             .navigationTitle("DM Offline Archive")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showDebugLog = true
-                    } label: {
-                        Image(systemName: "ladybug")
+                    HStack(spacing: 16) {
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .accessibilityLabel("Settings")
+
+                        Button {
+                            showDebugLog = true
+                        } label: {
+                            Image(systemName: "ladybug")
+                        }
+                        .accessibilityLabel("Debug log")
                     }
-                    .accessibilityLabel("Debug log")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     if isImporting {
@@ -80,6 +90,9 @@ struct LibraryView: View {
         }
         .sheet(isPresented: $showDebugLog) {
             DebugLogView()
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
         .alert(
             "Couldn't import that file",
