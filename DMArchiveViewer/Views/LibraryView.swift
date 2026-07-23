@@ -62,6 +62,7 @@ struct LibraryView: View {
             .searchable(text: $searchText, prompt: "Search")
         }
         .onAppear {
+            store.logLaunchDiagnostics()
             store.loadIndex()
             Task { await store.scanImportsFolder() }
         }
@@ -101,7 +102,18 @@ struct LibraryView: View {
         ContentUnavailableView {
             Label("No conversations yet", systemImage: "tray")
         } description: {
-            Text("Open the Files app → On My iPhone → DM Archive → \"Drop JSON Exports Here\", and copy an export .json file in. It's picked up automatically — or tap refresh below if it doesn't show up right away.")
+            VStack(spacing: 10) {
+                Text("Open the Files app → On My iPhone → DM Archive → \"Drop JSON Exports Here\", and copy an export .json file in. It's picked up automatically.")
+                Text("If Files doesn't show that folder, this is the exact path (usable directly in Filza or a similar tool):")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(store.importsFolderPath)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .background(Color(.systemGray5))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
         } actions: {
             HStack(spacing: 16) {
                 Button("Check now") { Task { await store.scanImportsFolder() } }
