@@ -3,7 +3,9 @@ import UIKit
 
 struct MessageRowView: View {
     let message: ArchiveMessage
+    var searchQuery: String = ""
     let onImageTap: (UIImage) -> Void
+    var onDoubleTap: (() -> Void)? = nil
 
     var body: some View {
         if message.isDivider {
@@ -14,6 +16,8 @@ struct MessageRowView: View {
                 .padding(.vertical, 10)
         } else {
             bubbleRow
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { onDoubleTap?() }
         }
     }
 
@@ -45,8 +49,7 @@ struct MessageRowView: View {
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     if hasText {
-                        Text(message.text ?? "")
-                            .foregroundStyle(isMe ? .white : .primary)
+                        messageText(message.text ?? "")
                     }
                     mediaViews
                     if let time = message.timeLabel, !time.isEmpty {
@@ -83,5 +86,65 @@ struct MessageRowView: View {
                     .onTapGesture { onImageTap(uiImage) }
             }
         }
+    }
+
+    // MARK: - Search highlighting
+    //
+    // Matches the same word-boundary rule as `messageMatches` (see
+    // SearchMatching.swift), but instead of a yes/no answer, this walks
+    // every match and rebuilds the line as concatenated `Text` segments
+    // — bold + yellow for the hit, the base bubble color everywhere
+    // else. SwiftUI's `Text` has no supported way to attach a
+    // *background* color to part of a line (that's a UIKit /
+    // NSAttributedString feature that `Text(AttributedString)` doesn't
+    // expose), so a literal highlighter-pen box isn't available here
+    // without dropping to a UILabel bridge. Bold + color reads clearly
+    // as "this is the match" without that complexity, and — because
+    // it's built with `Text + Text` rather than separate views — it
+    // still wraps as one normal paragraph instead of breaking into an
+    // HStack of fixed-width chunks.
+
+    @ViewBuilder
+    private func messageText(_ text: String) -> some View {
+        let baseColor: Color = isMe ? .white : .primary
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            Text(text).foregroundColor(baseColor)
+        } else {
+            highlighted(text, query: trimmed, baseColor: baseColor)
+        }
+    }
+
+    private func highlighted(_ text: String, query: String, baseColor: Color) -> Text {
+        guard let regex = try? NSRegularExpression(
+            pattern: "\\b\(NSRegularExpression.escapedPattern(for: query))",
+            options: .caseInsensitive
+        ) else {
+            return Text(text).foregroundColor(baseColor)
+        }
+
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        let matches = regex.matches(in: text, range: fullRange)
+        guard !matches.isEmpty else {
+            return Text(text).foregroundColor(baseColor)
+        }
+
+        var result = Text("")
+        var cursor = 0
+        for match in matches {
+            guard match.range.location >= cursor else { continue }
+            if match.range.location > cursor {
+                let before = nsText.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+                result = result + Text(before).foregroundColor(baseColor)
+            }
+            let matched = nsText.substring(with: match.range)
+            result = result + Text(matched).bold().foregroundColor(.yellow)
+            cursor = match.range.location + match.range.length
+        }
+        if cursor < nsText.length {
+            result = result + Text(nsText.substring(from: cursor)).foregroundColor(baseColor)
+        }
+        return result
     }
 }
