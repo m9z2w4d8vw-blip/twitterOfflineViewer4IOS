@@ -8,14 +8,8 @@ struct LibraryView: View {
     @State private var importErrorMessage: String?
     @State private var isImporting = false
     @State private var searchText = ""
+    @Environment(\.scenePhase) private var scenePhase
 
-    // .json alone was too strict in practice — a file that arrived via
-    // AirDrop or as an email/Files attachment doesn't always end up
-    // tagged with a clean "public.json" type, which could make it not
-    // even show up as selectable in the picker (looking exactly like
-    // "the file won't import" from the outside, with no error at all
-    // to explain why). Falling back through plainText/data/item covers
-    // that regardless of how the file's type metadata ended up tagged.
     private let importTypes: [UTType] = [.json, .plainText, .data, .item]
 
     private var filtered: [ConversationMeta] {
@@ -47,18 +41,35 @@ struct LibraryView: View {
                     if isImporting {
                         ProgressView()
                     } else {
-                        Button {
-                            showImporter = true
-                        } label: {
-                            Image(systemName: "square.and.arrow.down")
+                        HStack(spacing: 16) {
+                            Button {
+                                Task { await store.scanImportsFolder() }
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            .accessibilityLabel("Check the drop folder for new files")
+
+                            Button {
+                                showImporter = true
+                            } label: {
+                                Image(systemName: "square.and.arrow.down")
+                            }
+                            .accessibilityLabel("Import export file")
                         }
-                        .accessibilityLabel("Import export file")
                     }
                 }
             }
             .searchable(text: $searchText, prompt: "Search")
         }
-        .onAppear { store.loadIndex() }
+        .onAppear {
+            store.loadIndex()
+            Task { await store.scanImportsFolder() }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                Task { await store.scanImportsFolder() }
+            }
+        }
         .fileImporter(
             isPresented: $showImporter,
             allowedContentTypes: importTypes,
@@ -90,9 +101,12 @@ struct LibraryView: View {
         ContentUnavailableView {
             Label("No conversations yet", systemImage: "tray")
         } description: {
-            Text("Import a .json file exported from the DM Offline Archive browser extension using the button above.")
+            Text("Open the Files app → On My iPhone → DM Archive → \"Drop JSON Exports Here\", and copy an export .json file in. It's picked up automatically — or tap refresh below if it doesn't show up right away.")
         } actions: {
-            Button("Import a file") { showImporter = true }
+            HStack(spacing: 16) {
+                Button("Check now") { Task { await store.scanImportsFolder() } }
+                Button("Use file picker instead") { showImporter = true }
+            }
         }
     }
 
@@ -115,6 +129,9 @@ struct LibraryView: View {
                     store.delete(id: filtered[index].id)
                 }
             }
+        }
+        .refreshable {
+            await store.scanImportsFolder()
         }
     }
 
