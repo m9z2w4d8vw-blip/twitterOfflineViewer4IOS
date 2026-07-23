@@ -22,10 +22,6 @@ final class ArchiveStore: ObservableObject {
     }
 
     private func conversationFileURL(for id: String) -> URL {
-        // Conversation ids look like "1630181465462829057-1896696097785135104"
-        // (two numeric ids joined with a hyphen) — already filesystem-safe,
-        // but this guards against anything unexpected turning up in a
-        // future export format anyway.
         let safe = id.replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: ":", with: "_")
         return documentsURL.appendingPathComponent("conversation_\(safe).json")
@@ -43,13 +39,6 @@ final class ArchiveStore: ObservableObject {
         try? data.write(to: indexURL, options: .atomic)
     }
 
-    /// Imports one exported .json file. Throws with a message suitable
-    /// for showing directly to the person. Runs the actual file read and
-    /// JSON decode off the main actor — a large, photo-heavy export
-    /// doing that work synchronously on the main thread was a likely
-    /// cause of the app appearing to hang (or getting killed by the
-    /// watchdog for blocking too long) rather than failing with a clear
-    /// error message.
     func importFile(at url: URL) async throws {
         DebugLog.shared.log("import", "Starting import", detail: url.lastPathComponent)
 
@@ -118,8 +107,9 @@ final class ArchiveStore: ObservableObject {
         saveIndex()
     }
 
-    // Off the main actor deliberately — see importFile's comment above.
     nonisolated private static func readAndDecode(url: URL) async throws -> (Data, ArchiveExport) {
+        try await ensureDownloaded(url: url)
+
         let data: Data
         do {
             data = try Data(contentsOf: url)
@@ -130,10 +120,46 @@ final class ArchiveStore: ObservableObject {
         return (data, export)
     }
 
-    /// Turns a DecodingError into something that actually says what's
-    /// wrong and where — "doesn't look like an export" alone isn't
-    /// enough to fix a real schema mismatch, and this is the whole
-    /// reason the debug log exists.
+    // A file picked from iCloud Drive isn't guaranteed to already be
+    // downloaded onto the device — it can still be a cloud-only
+    // placeholder at the moment the picker hands the URL back, especially
+    // under Low Power Mode (which throttles background network activity)
+    // or a weak connection. Reading it before it's actually local was a
+    // likely cause of "pressing Open does nothing": no crash, no error,
+    // just a read that never produces anything a person can see.
+    // This explicitly requests the download and waits, rather than
+    // assuming the picker already handled it.
+    nonisolated private static func ensureDownloaded(url: URL) async throws {
+        guard let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]),
+              values.isUbiquitousItem == true else {
+            return // not an iCloud-hosted file — nothing to wait for
+        }
+
+        if values.ubiquitousItemDownloadingStatus == .current || values.ubiquitousItemDownloadingStatus == .downloaded {
+            return
+        }
+
+        await DebugLog.shared.log(
+            "import",
+            "File is in iCloud and not fully downloaded yet — requesting download",
+            detail: url.lastPathComponent
+        )
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline {
+            let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus
+            if status == .current || status == .downloaded {
+                await DebugLog.shared.log("import", "iCloud download finished", detail: url.lastPathComponent)
+                return
+            }
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        await DebugLog.shared.log("import", "Gave up waiting for iCloud download after 30s", detail: url.lastPathComponent)
+        throw ImportError.icloudTimeout
+    }
+
     nonisolated private static func describe(_ error: Error) -> String {
         guard let decodingError = error as? DecodingError else {
             return error.localizedDescription
@@ -159,6 +185,7 @@ final class ArchiveStore: ObservableObject {
         case couldNotReadFile(String)
         case decodeFailed(String)
         case missingConversationId
+        case icloudTimeout
 
         var errorDescription: String? {
             switch self {
@@ -168,6 +195,8 @@ final class ArchiveStore: ObservableObject {
                 return "This doesn't look like a DM Offline Archive export.\n\n\(reason)"
             case .missingConversationId:
                 return "This export is missing a conversation id, so it can't be saved."
+            case .icloudTimeout:
+                return "This file is stored in iCloud and didn't finish downloading in time. Try opening it directly in the Files app first (which forces a download), then import it again — or check your connection and Low Power Mode."
             }
         }
     }
