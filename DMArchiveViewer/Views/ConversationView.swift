@@ -20,13 +20,20 @@ struct ConversationView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
 
     private var displayedMessages: [IndexedMessage] {
-        let source: [ArchiveMessage]
-        if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
-            source = messages
-        } else {
-            source = messages.filter { $0.isDivider || messageMatches($0.text, query: searchText) }
-        }
-        return source.indexed()
+        // IDs here are each message's position in the full `messages`
+        // array, computed before any filtering — not the filtered
+        // list's own offsets. That's what lets a scroll target survive
+        // clearing the search text: the id still points at the right
+        // message once the full list is back.
+        let all = messages.indexed()
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return all }
+        // While actively searching, drop date dividers entirely and
+        // show only the matching bubbles. Keeping every divider (the
+        // old behavior) meant a couple of real hits could end up
+        // buried under a wall of unrelated dates with nothing between
+        // them.
+        return all.filter { !$0.message.isDivider && messageMatches($0.message.text, query: trimmed) }
     }
 
     private var mediaItems: [MediaGalleryItem] {
@@ -45,9 +52,18 @@ struct ConversationView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         ForEach(displayedMessages) { item in
-                            MessageRowView(message: item.message) { image in
-                                lightboxImage = image
-                            }
+                            MessageRowView(
+                                message: item.message,
+                                searchQuery: searchText,
+                                onImageTap: { image in lightboxImage = image },
+                                onDoubleTap: {
+                                    let target = item.id
+                                    searchText = ""
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                        scrollTarget = target
+                                    }
+                                }
+                            )
                             .id(item.id)
                         }
                     }
@@ -66,10 +82,26 @@ struct ConversationView: View {
             if isLoading {
                 ProgressView("Loading…")
             }
+
+            if let lightboxImage {
+                // Deliberately an overlay in the same view tree, not a
+                // `.fullScreenCover`. A system cover removes/obscures
+                // what's behind it, which would leave the material
+                // blur below with nothing real to blur. Staying inline
+                // means the actual thread is still there to show
+                // through.
+                LightboxView(image: lightboxImage) {
+                    self.lightboxImage = nil
+                }
+                .transition(.opacity)
+                .zIndex(1)
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: lightboxImage != nil)
         .background(wallpaperBackground)
         .navigationTitle(conversationName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(lightboxImage == nil ? .visible : .hidden, for: .navigationBar)
         .searchable(text: $searchText, prompt: "Search in this conversation")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -134,14 +166,6 @@ struct ConversationView: View {
                 wallpaperDataUrl = export.wallpaperDataUrl
             }
             isLoading = false
-        }
-        .fullScreenCover(isPresented: Binding(
-            get: { lightboxImage != nil },
-            set: { if !$0 { lightboxImage = nil } }
-        )) {
-            if let lightboxImage {
-                LightboxView(image: lightboxImage)
-            }
         }
     }
 
