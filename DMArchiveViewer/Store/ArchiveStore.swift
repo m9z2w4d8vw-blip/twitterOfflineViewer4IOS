@@ -4,6 +4,13 @@ import Foundation
 final class ArchiveStore: ObservableObject {
     @Published var conversations: [ConversationMeta] = []
 
+    // Bumped by hand each round this file changes meaningfully — logged
+    // at launch specifically so "did the new build actually install"
+    // has a hard, checkable answer instead of just asking. If the debug
+    // log doesn't show this exact string after reinstalling, the new
+    // build isn't the one actually running yet.
+    static let buildMarker = "build-2026-07-23-r5-dropfolder-diagnostics"
+
     private let fileManager = FileManager.default
 
     private var documentsURL: URL {
@@ -18,6 +25,38 @@ final class ArchiveStore: ObservableObject {
         let safe = id.replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: ":", with: "_")
         return documentsURL.appendingPathComponent("conversation_\(safe).json")
+    }
+
+    /// Logs, at launch, exactly what would settle "is the new build
+    /// actually installed and running" and "where is this folder on
+    /// disk" without guessing — including a live read of
+    /// UIFileSharingEnabled straight from *this build's own*
+    /// Info.plist, and the raw absolute paths, which are usable
+    /// directly from a filesystem browser like Filza on a
+    /// semi-jailbroken/TrollStore install regardless of whether Files
+    /// app integration is showing anything.
+    func logLaunchDiagnostics() {
+        DebugLog.shared.log("launch", "App launched — build marker", detail: Self.buildMarker)
+
+        let fileSharingEnabled = Bundle.main.object(forInfoDictionaryKey: "UIFileSharingEnabled") as? Bool
+        DebugLog.shared.log(
+            "launch",
+            "UIFileSharingEnabled read from this running build's Info.plist",
+            detail: fileSharingEnabled == true ? "true" : "false or missing — this is an OLD build if so"
+        )
+
+        DebugLog.shared.log("launch", "Documents directory (absolute path)", detail: documentsURL.path)
+        let docsContents = (try? fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil))?
+            .map(\.lastPathComponent) ?? []
+        DebugLog.shared.log("launch", "Documents contents", detail: docsContents.isEmpty ? "(empty)" : docsContents.joined(separator: ", "))
+
+        let importsFolder = importsFolderURL
+        DebugLog.shared.log("launch", "Drop folder (absolute path — usable directly in Filza)", detail: importsFolder.path)
+        let importsContents = (try? fileManager.contentsOfDirectory(at: importsFolder, includingPropertiesForKeys: nil))?
+            .map(\.lastPathComponent) ?? []
+        DebugLog.shared.log("launch", "Drop folder contents", detail: importsContents.isEmpty ? "(empty)" : importsContents.joined(separator: ", "))
+
+        _ = importedFolderURL
     }
 
     func loadIndex() {
@@ -94,12 +133,10 @@ final class ArchiveStore: ObservableObject {
         return try JSONDecoder().decode(ArchiveExport.self, from: data)
     }
 
-    // Visible in the Files app under On My iPhone → DM Archive → "Drop
-    // JSON Exports Here", once UIFileSharingEnabled is set in Info.plist.
-    // A dedicated subfolder rather than the bare Documents root, so it's
-    // obvious where to put a new file without it sitting next to this
-    // app's own internal bookkeeping (the index, saved conversations,
-    // the debug log).
+    var importsFolderPath: String {
+        importsFolderURL.path
+    }
+
     private var importsFolderURL: URL {
         let url = documentsURL.appendingPathComponent("Drop JSON Exports Here", isDirectory: true)
         if !fileManager.fileExists(atPath: url.path) {
@@ -116,14 +153,6 @@ final class ArchiveStore: ObservableObject {
         return url
     }
 
-    /// Looks in the Files-app-visible drop folder for anything new and
-    /// imports it automatically — a path that doesn't depend on the
-    /// system document picker's import callback at all, since that
-    /// callback wasn't reliably firing in a sideloaded install. A
-    /// successfully-imported file gets moved into an "Imported"
-    /// subfolder (not deleted) so nothing disappears unexpectedly and
-    /// nothing gets re-processed on the next scan. A failed one is left
-    /// exactly where it was, so it's still there to retry or inspect.
     func scanImportsFolder() async {
         let folder = importsFolderURL
         guard let items = try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else {
