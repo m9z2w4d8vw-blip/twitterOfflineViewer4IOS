@@ -12,7 +12,16 @@ struct MediaGalleryView: View {
     let onSelect: (Int) -> Void
     @Environment(\.dismiss) private var dismiss
 
-    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 8)]
+    // Fixed 3-column grid, edge-to-edge, perfectly square cells — this
+    // is what X's own "Shared media" screen looks like. The previous
+    // version used an adaptive grid with `.aspectRatio(1, contentMode:
+    // .fill)` and only a `minHeight`, with no matching fixed width —
+    // that left the layout system free to size cells inconsistently,
+    // which is why thumbnails came out uneven. Computing an exact
+    // square side from the available width and using `.fixed(side)`
+    // columns removes that ambiguity entirely.
+    private let columnCount = 3
+    private let spacing: CGFloat = 2
 
     var body: some View {
         NavigationStack {
@@ -20,13 +29,19 @@ struct MediaGalleryView: View {
                 if items.isEmpty {
                     ContentUnavailableView("No photos in this conversation", systemImage: "photo.on.rectangle")
                 } else {
-                    ScrollView {
-                        LazyVGrid(columns: columns, spacing: 8) {
-                            ForEach(items) { item in
-                                thumbnail(for: item)
+                    GeometryReader { proxy in
+                        let totalSpacing = spacing * CGFloat(columnCount - 1)
+                        let side = (proxy.size.width - totalSpacing) / CGFloat(columnCount)
+                        ScrollView {
+                            LazyVGrid(
+                                columns: Array(repeating: GridItem(.fixed(side), spacing: spacing), count: columnCount),
+                                spacing: spacing
+                            ) {
+                                ForEach(items) { item in
+                                    thumbnail(for: item, side: side)
+                                }
                             }
                         }
-                        .padding()
                     }
                 }
             }
@@ -41,18 +56,19 @@ struct MediaGalleryView: View {
     }
 
     @ViewBuilder
-    private func thumbnail(for item: MediaGalleryItem) -> some View {
-        if let uiImage = UIImage(dataURLString: item.dataUrl) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(1, contentMode: .fill)
-                .frame(minHeight: 100)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .clipped()
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onSelect(item.messageIndex)
-                }
+    private func thumbnail(for item: MediaGalleryItem, side: CGFloat) -> some View {
+        Group {
+            if let uiImage = UIImage(dataURLString: item.dataUrl) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: side, height: side)
+                    .clipped()
+            } else {
+                Color(.systemGray5).frame(width: side, height: side)
+            }
         }
+        .contentShape(Rectangle())
+        .onTapGesture { onSelect(item.messageIndex) }
     }
 }
