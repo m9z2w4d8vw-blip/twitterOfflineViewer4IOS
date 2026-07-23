@@ -9,6 +9,12 @@ on:
       - "project.yml"
       - ".github/workflows/build-ios.yml"
 
+# Needed for the release-publishing step below to create/update a
+# release and attach the .ipa to it — the default token permissions
+# don't include this.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-14
@@ -28,12 +34,6 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      # Building unsigned for a real device architecture (iphoneos, not
-      # the simulator) is deliberate: this is the shape a sideloading
-      # tool like AltStore/SideStore expects to re-sign and install with
-      # your own free Apple ID. It is NOT something that can be
-      # installed straight onto an iPhone as-is — see the repo README
-      # for what actually happens after this artifact is downloaded.
       - name: Build (unsigned, device architecture)
         run: |
           xcodebuild \
@@ -71,3 +71,22 @@ jobs:
           name: DMArchiveViewer-unsigned-ipa
           path: DMArchiveViewer-unsigned.ipa
           retention-days: 14
+
+      # Artifacts (above) expire and are buried a few clicks deep under
+      # the Actions tab. A release is the one obvious, permanent place
+      # to grab the current build — reusing the same "latest" tag each
+      # run replaces its assets rather than piling up a new release per
+      # push, so there's always exactly one clear place to look.
+      - name: Publish to Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          body: |
+            Automatically built from commit ${{ github.sha }}.
+
+            This is an **unsigned** .ipa — it needs AltStore or SideStore
+            (or your own signing setup) to actually install on a device.
+            See the repo README for details.
+          make_latest: true
+          files: DMArchiveViewer-unsigned.ipa
