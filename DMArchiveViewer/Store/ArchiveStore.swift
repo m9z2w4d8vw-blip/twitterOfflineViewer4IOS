@@ -1,12 +1,5 @@
 import Foundation
 
-// Persists imported conversations to the app's own Documents directory
-// so they survive relaunches without needing to be re-imported every
-// time — the whole point of importing rather than just viewing a picked
-// file once. A small index file holds just the metadata needed for the
-// Library list, so opening the app doesn't require reading every full
-// conversation (which can be many megabytes each, given embedded
-// photos) just to show names and counts.
 @MainActor
 final class ArchiveStore: ObservableObject {
     @Published var conversations: [ConversationMeta] = []
@@ -101,6 +94,67 @@ final class ArchiveStore: ObservableObject {
         return try JSONDecoder().decode(ArchiveExport.self, from: data)
     }
 
+    // Visible in the Files app under On My iPhone → DM Archive → "Drop
+    // JSON Exports Here", once UIFileSharingEnabled is set in Info.plist.
+    // A dedicated subfolder rather than the bare Documents root, so it's
+    // obvious where to put a new file without it sitting next to this
+    // app's own internal bookkeeping (the index, saved conversations,
+    // the debug log).
+    private var importsFolderURL: URL {
+        let url = documentsURL.appendingPathComponent("Drop JSON Exports Here", isDirectory: true)
+        if !fileManager.fileExists(atPath: url.path) {
+            try? fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        return url
+    }
+
+    private var importedFolderURL: URL {
+        let url = importsFolderURL.appendingPathComponent("Imported", isDirectory: true)
+        if !fileManager.fileExists(atPath: url.path) {
+            try? fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        return url
+    }
+
+    /// Looks in the Files-app-visible drop folder for anything new and
+    /// imports it automatically — a path that doesn't depend on the
+    /// system document picker's import callback at all, since that
+    /// callback wasn't reliably firing in a sideloaded install. A
+    /// successfully-imported file gets moved into an "Imported"
+    /// subfolder (not deleted) so nothing disappears unexpectedly and
+    /// nothing gets re-processed on the next scan. A failed one is left
+    /// exactly where it was, so it's still there to retry or inspect.
+    func scanImportsFolder() async {
+        let folder = importsFolderURL
+        guard let items = try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else {
+            return
+        }
+        let jsonFiles = items.filter { $0.pathExtension.lowercased() == "json" }
+        guard !jsonFiles.isEmpty else { return }
+
+        DebugLog.shared.log(
+            "import",
+            "Drop folder scan found \(jsonFiles.count) file(s)",
+            detail: jsonFiles.map(\.lastPathComponent).joined(separator: ", ")
+        )
+
+        for fileURL in jsonFiles {
+            do {
+                try await importFile(at: fileURL)
+                let destination = importedFolderURL.appendingPathComponent(fileURL.lastPathComponent)
+                try? fileManager.removeItem(at: destination)
+                try fileManager.moveItem(at: fileURL, to: destination)
+                DebugLog.shared.log("import", "Moved processed file into Imported", detail: fileURL.lastPathComponent)
+            } catch {
+                DebugLog.shared.log(
+                    "import",
+                    "Auto-import from drop folder failed — left in place",
+                    detail: "\(fileURL.lastPathComponent): \(error.localizedDescription)"
+                )
+            }
+        }
+    }
+
     func delete(id: String) {
         try? fileManager.removeItem(at: conversationFileURL(for: id))
         conversations.removeAll { $0.id == id }
@@ -120,19 +174,10 @@ final class ArchiveStore: ObservableObject {
         return (data, export)
     }
 
-    // A file picked from iCloud Drive isn't guaranteed to already be
-    // downloaded onto the device — it can still be a cloud-only
-    // placeholder at the moment the picker hands the URL back, especially
-    // under Low Power Mode (which throttles background network activity)
-    // or a weak connection. Reading it before it's actually local was a
-    // likely cause of "pressing Open does nothing": no crash, no error,
-    // just a read that never produces anything a person can see.
-    // This explicitly requests the download and waits, rather than
-    // assuming the picker already handled it.
     nonisolated private static func ensureDownloaded(url: URL) async throws {
         guard let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]),
               values.isUbiquitousItem == true else {
-            return // not an iCloud-hosted file — nothing to wait for
+            return
         }
 
         if values.ubiquitousItemDownloadingStatus == .current || values.ubiquitousItemDownloadingStatus == .downloaded {
