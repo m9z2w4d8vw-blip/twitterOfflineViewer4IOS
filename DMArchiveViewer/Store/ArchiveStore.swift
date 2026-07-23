@@ -4,11 +4,6 @@ import Foundation
 final class ArchiveStore: ObservableObject {
     @Published var conversations: [ConversationMeta] = []
 
-    // Bumped by hand each round this file changes meaningfully — logged
-    // at launch specifically so "did the new build actually install"
-    // has a hard, checkable answer instead of just asking. If the debug
-    // log doesn't show this exact string after reinstalling, the new
-    // build isn't the one actually running yet.
     static let buildMarker = "build-2026-07-23-r5-dropfolder-diagnostics"
 
     private let fileManager = FileManager.default
@@ -27,14 +22,6 @@ final class ArchiveStore: ObservableObject {
         return documentsURL.appendingPathComponent("conversation_\(safe).json")
     }
 
-    /// Logs, at launch, exactly what would settle "is the new build
-    /// actually installed and running" and "where is this folder on
-    /// disk" without guessing — including a live read of
-    /// UIFileSharingEnabled straight from *this build's own*
-    /// Info.plist, and the raw absolute paths, which are usable
-    /// directly from a filesystem browser like Filza on a
-    /// semi-jailbroken/TrollStore install regardless of whether Files
-    /// app integration is showing anything.
     func logLaunchDiagnostics() {
         DebugLog.shared.log("launch", "App launched — build marker", detail: Self.buildMarker)
 
@@ -182,6 +169,17 @@ final class ArchiveStore: ObservableObject {
                 )
             }
         }
+    }
+
+    func setWallpaper(for id: String, dataUrl: String?) async {
+        guard var export = await loadFullExport(for: id) else {
+            DebugLog.shared.log("wallpaper", "Could not set wallpaper — conversation not found", detail: id)
+            return
+        }
+        export.wallpaperDataUrl = dataUrl
+        guard let encoded = try? JSONEncoder().encode(export) else { return }
+        try? encoded.write(to: conversationFileURL(for: id), options: .atomic)
+        DebugLog.shared.log("wallpaper", dataUrl == nil ? "Wallpaper removed" : "Wallpaper set", detail: id)
     }
 
     func delete(id: String) {
