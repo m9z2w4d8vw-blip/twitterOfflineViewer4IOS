@@ -9,8 +9,8 @@ import Foundation
 struct ArchiveExport: Codable {
     let format: String?
     let exportedAt: Double?
-    let conversation: ConversationMeta
-    let wallpaperDataUrl: String?
+    var conversation: ConversationMeta
+    var wallpaperDataUrl: String?
     let messages: [ArchiveMessage]
 }
 
