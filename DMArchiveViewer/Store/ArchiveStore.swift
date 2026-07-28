@@ -91,6 +91,7 @@ final class ArchiveStore: ObservableObject {
         }
 
         if let idx = conversations.firstIndex(where: { $0.id == meta.id }) {
+            meta.customName = conversations[idx].customName
             conversations[idx] = meta
         } else {
             conversations.append(meta)
@@ -186,6 +187,25 @@ final class ArchiveStore: ObservableObject {
         try? fileManager.removeItem(at: conversationFileURL(for: id))
         conversations.removeAll { $0.id == id }
         saveIndex()
+    }
+
+    func rename(id: String, to newName: String) {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        conversations[idx].customName = trimmed.isEmpty ? nil : trimmed
+        saveIndex()
+        DebugLog.shared.log(
+            "rename",
+            trimmed.isEmpty ? "Rename cleared (empty name)" : "Conversation renamed",
+            detail: "\(id) → \(trimmed.isEmpty ? conversations[idx].name : trimmed)"
+        )
+    }
+
+    func resetName(id: String) {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[idx].customName = nil
+        saveIndex()
+        DebugLog.shared.log("rename", "Conversation name reset to original", detail: "\(id) → \(conversations[idx].name)")
     }
 
     nonisolated private static func readAndDecode(url: URL) async throws -> (Data, ArchiveExport) {
