@@ -10,6 +10,8 @@ struct AvatarView: View {
     let dataUrl: String?
     var size: CGFloat = 40
 
+    @State private var loadedImage: UIImage?
+
     private static let palette: [Color] = [
         Color(red: 1.0, green: 0.42, blue: 0.42),
         Color(red: 1.0, green: 0.66, blue: 0.30),
@@ -35,8 +37,8 @@ struct AvatarView: View {
 
     var body: some View {
         Group {
-            if let dataUrl, let uiImage = UIImage(dataURLString: dataUrl) {
-                Image(uiImage: uiImage)
+            if let loadedImage {
+                Image(uiImage: loadedImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
@@ -50,5 +52,15 @@ struct AvatarView: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+        // Almost always a data: URL that decodes instantly with no
+        // network — see ArchiveMediaLoader in DataURLImage.swift. Only
+        // falls through to an actual fetch on the rare avatar the
+        // extension couldn't resolve at scrape time, in which case this
+        // shows the colored-initial fallback above until (and unless)
+        // that fetch succeeds.
+        .task(id: dataUrl) {
+            guard let dataUrl else { return }
+            loadedImage = await ArchiveMediaLoader.load(dataUrl)
+        }
     }
 }
