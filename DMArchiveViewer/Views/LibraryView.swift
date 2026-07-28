@@ -12,7 +12,7 @@ struct LibraryView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     // Same key SettingsView's "App Name" field writes to.
-    @AppStorage("appDisplayName") private var appDisplayName: String = "DM Offline Archive"
+    @AppStorage("appDisplayName") private var appDisplayName: String = "mssgs"
 
     private let importTypes: [UTType] = [.json, .plainText, .data, .item]
 
@@ -119,7 +119,7 @@ struct LibraryView: View {
             Label("No conversations yet", systemImage: "tray")
         } description: {
             VStack(spacing: 10) {
-                Text("Open the Files app → On My iPhone → DM Archive → \"Drop JSON Exports Here\", and copy an export .json file in. It's picked up automatically.")
+                Text("Open the Files app → On My iPhone → mssgs → \"Drop JSON Exports Here\", and copy an export .json file in. It's picked up automatically.")
                 Text("If Files doesn't show that folder, this is the exact path (usable directly in Filza or a similar tool):")
                     .font(.caption)
                     .foregroundStyle(.secondary)
