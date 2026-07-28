@@ -4,7 +4,7 @@ import Foundation
 final class ArchiveStore: ObservableObject {
     @Published var conversations: [ConversationMeta] = []
 
-    static let buildMarker = "build-2026-07-27-r8-mssgs-rebrand-linked-media"
+    static let buildMarker = "build-2026-07-28-r9-drop-broken-icon-ref"
 
     private let fileManager = FileManager.default
 
