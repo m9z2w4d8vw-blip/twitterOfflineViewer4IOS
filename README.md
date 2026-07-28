@@ -1,4 +1,9 @@
-# DM Archive Viewer (iOS)
+# mssgs (iOS)
+
+_Formerly "DM Archive Viewer" — renamed on the Home Screen and in-app,
+though the underlying Xcode project, target, and CI artifacts below
+still use the original `DMArchiveViewer` name, so this doc's file
+paths and commands are unaffected._
 
 A native SwiftUI app for iOS 17+ that imports and displays the `.json`
 files exported by the **DM Offline Archive** Chrome extension's
