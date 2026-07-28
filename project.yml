@@ -1,6 +1,6 @@
 name: DMArchiveViewer
 options:
-  bundleIdPrefix: com.dmarchive
+  bundleIdPrefix: com.mssgs
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -16,7 +16,7 @@ targets:
       path: DMArchiveViewer/Info.plist
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.dmarchive.viewer
+        PRODUCT_BUNDLE_IDENTIFIER: com.mssgs.archive
         PRODUCT_NAME: DMArchiveViewer
         MARKETING_VERSION: "1.1"
         CURRENT_PROJECT_VERSION: "2"
