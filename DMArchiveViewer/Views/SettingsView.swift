@@ -5,16 +5,12 @@ enum AppearanceMode: String {
     case dark, light
 }
 
-// One case per icon actually built into the app (see
-// Assets.xcassets/AppIcon-Discreet.appiconset, and
-// ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES in project.yml, which
-// is what registers it with iOS as a real alternate icon). Adding
-// another option later means: drop in a new .appiconset, add its name
-// to that build setting, and add one case here — the picker UI below
-// doesn't need to change.
+// One case per icon actually built into the app. Adding another
+// option later means: drop in a new .appiconset, add its name to
+// ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES in project.yml, and
+// add one case here — the picker UI below doesn't need to change.
 enum AppIconOption: String, CaseIterable, Identifiable {
     case classic
-    case discreet
 
     var id: String { rawValue }
 
@@ -24,14 +20,12 @@ enum AppIconOption: String, CaseIterable, Identifiable {
     var alternateIconName: String? {
         switch self {
         case .classic: return nil
-        case .discreet: return "AppIcon-Discreet"
         }
     }
 
     var displayName: String {
         switch self {
         case .classic: return "Classic"
-        case .discreet: return "Discreet"
         }
     }
 
@@ -43,7 +37,6 @@ enum AppIconOption: String, CaseIterable, Identifiable {
     var swatchColor: Color {
         switch self {
         case .classic: return Color(hex: "#0A84FCFF")
-        case .discreet: return Color(hex: "#3A3A3CFF")
         }
     }
 }
