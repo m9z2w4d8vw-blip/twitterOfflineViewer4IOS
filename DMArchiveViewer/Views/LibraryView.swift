@@ -9,6 +9,8 @@ struct LibraryView: View {
     @State private var importErrorMessage: String?
     @State private var isImporting = false
     @State private var searchText = ""
+    @State private var renameTarget: ConversationMeta?
+    @State private var renameText = ""
     @Environment(\.scenePhase) private var scenePhase
 
     // Same key SettingsView's "App Name" field writes to.
@@ -19,7 +21,7 @@ struct LibraryView: View {
     private var filtered: [ConversationMeta] {
         let trimmed = searchText.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return store.conversations }
-        return store.conversations.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
+        return store.conversations.filter { $0.displayName.localizedCaseInsensitiveContains(trimmed) }
     }
 
     var body: some View {
@@ -112,6 +114,27 @@ struct LibraryView: View {
             },
             message: { Text(importErrorMessage ?? "") }
         )
+        .alert(
+            "Rename conversation",
+            isPresented: Binding(
+                get: { renameTarget != nil },
+                set: { if !$0 { renameTarget = nil } }
+            ),
+            actions: {
+                TextField("Name", text: $renameText)
+                    .textInputAutocapitalization(.words)
+                Button("Cancel", role: .cancel) { renameTarget = nil }
+                Button("Save") {
+                    if let target = renameTarget {
+                        store.rename(id: target.id, to: renameText)
+                    }
+                    renameTarget = nil
+                }
+            },
+            message: {
+                Text("This only changes what's shown here in mssgs — it doesn't touch the original export file or the extension.")
+            }
+        )
     }
 
     private var emptyState: some View {
@@ -145,11 +168,26 @@ struct LibraryView: View {
                     ConversationView(
                         store: store,
                         conversationId: convo.id,
-                        conversationName: convo.name,
+                        conversationName: convo.displayName,
                         avatarDataUrl: convo.avatarDataUrl
                     )
                 } label: {
                     row(for: convo)
+                }
+                .contextMenu {
+                    Button {
+                        renameText = convo.displayName
+                        renameTarget = convo
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    if convo.customName != nil {
+                        Button(role: .destructive) {
+                            store.resetName(id: convo.id)
+                        } label: {
+                            Label("Reset to Original Name", systemImage: "arrow.uturn.backward")
+                        }
+                    }
                 }
             }
             .onDelete { offsets in
@@ -165,9 +203,9 @@ struct LibraryView: View {
 
     private func row(for convo: ConversationMeta) -> some View {
         HStack(spacing: 12) {
-            AvatarView(name: convo.name, dataUrl: convo.avatarDataUrl, size: 46)
+            AvatarView(name: convo.displayName, dataUrl: convo.avatarDataUrl, size: 46)
             VStack(alignment: .leading, spacing: 2) {
-                Text(convo.name)
+                Text(convo.displayName)
                     .font(.headline)
                 Text("\(convo.messageCount ?? 0) messages")
                     .font(.subheadline)
