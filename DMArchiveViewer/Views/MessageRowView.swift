@@ -87,14 +87,7 @@ struct MessageRowView: View {
     @ViewBuilder
     private var mediaViews: some View {
         ForEach(mediaList, id: \.self) { src in
-            if let uiImage = UIImage(dataURLString: src) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 240, maxHeight: 320)
-                    .clipShape(RoundedRectangle(cornerRadius: isMediaOnly ? 18 : 12, style: .continuous))
-                    .onTapGesture { onImageTap(uiImage) }
-            }
+            BubbleMediaThumbnail(src: src, cornerRadius: isMediaOnly ? 18 : 12, onTap: onImageTap)
         }
     }
 
@@ -155,5 +148,58 @@ struct MessageRowView: View {
             result = result + Text(nsText.substring(from: cursor)).foregroundColor(baseColor)
         }
         return result
+    }
+}
+
+// A `media` entry is either embedded (a data: URL, decodes instantly,
+// no network needed) or linked (a plain pbs.twimg.com URL from a
+// shared post's preview photo, needs a fetch — see ArchiveMediaLoader
+// in DataURLImage.swift). This view covers both: it renders the same
+// way once loaded either way, and only shows a spinner/placeholder
+// during the brief window a linked photo is still being fetched.
+private struct BubbleMediaThumbnail: View {
+    let src: String
+    let cornerRadius: CGFloat
+    let onTap: (UIImage) -> Void
+
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 240, maxHeight: 320)
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    .onTapGesture { onTap(image) }
+            } else if failed {
+                placeholder(systemImage: "photo.badge.exclamationmark")
+            } else {
+                placeholder(systemImage: nil)
+                    .overlay { ProgressView() }
+            }
+        }
+        .task(id: src) {
+            guard image == nil, !failed else { return }
+            if let loaded = await ArchiveMediaLoader.load(src) {
+                image = loaded
+            } else {
+                failed = true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func placeholder(systemImage: String?) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color(.systemGray5))
+            .frame(width: 160, height: 160)
+            .overlay {
+                if let systemImage {
+                    Image(systemName: systemImage).foregroundStyle(.secondary)
+                }
+            }
     }
 }
