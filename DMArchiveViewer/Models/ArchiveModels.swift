@@ -25,6 +25,18 @@ struct ConversationMeta: Codable, Equatable {
     // Library can show when a conversation was brought into this app,
     // separately from when it was originally saved from X.
     var importedAt: Double?
+    // Set only by the person, via long-press → Rename on a Library row.
+    // Deliberately a separate field from `name` rather than overwriting
+    // it directly — `name` always mirrors whatever the extension's
+    // export says, so a later re-import (the normal way to pick up an
+    // extension-side fix, or fresher messages) can keep refreshing it
+    // safely without stomping on a rename the person chose on purpose.
+    var customName: String?
+
+    var displayName: String {
+        let trimmed = customName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? name : trimmed
+    }
 }
 
 struct ArchiveMessage: Codable {
