@@ -60,7 +60,7 @@ struct SettingsView: View {
     @AppStorage("receiverBubbleColorHex") private var receiverBubbleColorHex: String = BubbleColorDefaults.receiverBubble
 
     // Same key LibraryView's navigationTitle reads.
-    @AppStorage("appDisplayName") private var appDisplayName: String = "DM Offline Archive"
+    @AppStorage("appDisplayName") private var appDisplayName: String = "mssgs"
 
     @State private var currentAlternateIconName: String? = UIApplication.shared.alternateIconName
     @State private var iconSwitchError: String?
