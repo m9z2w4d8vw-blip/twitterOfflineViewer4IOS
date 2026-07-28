@@ -125,12 +125,45 @@ final class ArchiveStore: ObservableObject {
         importsFolderURL.path
     }
 
+    // Some iOS versions — and, per real reports on TrollStore's own
+    // issue tracker, TrollStore-installed apps more often — don't
+    // reliably surface a UIFileSharingEnabled app's folder under
+    // Files → On My iPhone from an empty directory alone. This gives
+    // a second, more direct way in that doesn't depend on that
+    // listing/discovery step succeeding at all: `shareddocuments://`
+    // is the Files app's own URL scheme for jumping straight into a
+    // specific sandboxed app's folder, the same mechanism a "Reveal in
+    // Files" button in any ordinary App Store app uses. It works
+    // whether or not the folder ever shows up by browsing normally.
+    var dropFolderFilesAppURL: URL? {
+        guard let encoded = importsFolderURL.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
+        return URL(string: "shareddocuments://\(encoded)")
+    }
+
     private var importsFolderURL: URL {
         let url = documentsURL.appendingPathComponent("Drop JSON Exports Here", isDirectory: true)
         if !fileManager.fileExists(atPath: url.path) {
             try? fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+            writePlaceholderReadme(in: url)
         }
         return url
+    }
+
+    // An empty folder is exactly the case a couple of real bug reports
+    // describe as not reliably showing up in Files — dropping a small
+    // file in at creation time costs nothing, and doubles as an
+    // in-place explanation if someone finds this folder by browsing
+    // rather than through the app itself.
+    private func writePlaceholderReadme(in folder: URL) {
+        let text = """
+        Drop a DM Offline Archive export .json file here.
+
+        mssgs checks this folder automatically on launch, on pull-to-
+        refresh in the conversation list, and via the refresh icon in
+        the top right — no need to use the in-app import button unless
+        you'd rather pick the file from a sheet instead.
+        """
+        try? text.write(to: folder.appendingPathComponent("Read Me.txt"), atomically: true, encoding: .utf8)
     }
 
     private var importedFolderURL: URL {
