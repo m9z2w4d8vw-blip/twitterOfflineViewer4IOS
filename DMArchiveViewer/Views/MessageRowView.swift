@@ -91,63 +91,53 @@ struct MessageRowView: View {
         }
     }
 
-    // MARK: - Search highlighting
+    // MARK: - Text styling: search highlighting + tappable links
     //
-    // Matches the same word-boundary rule as `messageMatches` (see
-    // SearchMatching.swift), but instead of a yes/no answer, this walks
-    // every match and rebuilds the line as concatenated `Text` segments
-    // — bold + yellow for the hit, the base bubble color everywhere
-    // else. SwiftUI's `Text` has no supported way to attach a
-    // *background* color to part of a line (that's a UIKit /
-    // NSAttributedString feature that `Text(AttributedString)` doesn't
-    // expose), so a literal highlighter-pen box isn't available here
-    // without dropping to a UILabel bridge. Bold + color reads clearly
-    // as "this is the match" without that complexity, and — because
-    // it's built with `Text + Text` rather than separate views — it
-    // still wraps as one normal paragraph instead of breaking into an
-    // HStack of fixed-width chunks.
+    // Both are just attribute ranges laid over the same
+    // AttributedString, so they compose in one pass instead of two
+    // separate rendering paths. A word-boundary search hit gets bold +
+    // yellow, the same rule as SearchMatching.swift. A plain http(s)
+    // URL — the same shape the extension's appendLinkifiedText (in
+    // viewer.js) turns into a real <a class="msg-link">, same text
+    // color + underline, no color swap — gets AttributedString's
+    // `.link` attribute, which SwiftUI's Text renders as a genuinely
+    // tappable link with no extra gesture plumbing needed.
 
     @ViewBuilder
     private func messageText(_ text: String) -> some View {
-        let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty {
-            Text(text).foregroundColor(textColor)
-        } else {
-            highlighted(text, query: trimmed, baseColor: textColor)
-        }
+        Text(styledAttributedString(text))
     }
 
-    private func highlighted(_ text: String, query: String, baseColor: Color) -> Text {
-        guard let regex = try? NSRegularExpression(
-            pattern: "\\b\(NSRegularExpression.escapedPattern(for: query))",
-            options: .caseInsensitive
-        ) else {
-            return Text(text).foregroundColor(baseColor)
-        }
-
+    private func styledAttributedString(_ text: String) -> AttributedString {
+        var attributed = AttributedString(text)
+        attributed.foregroundColor = textColor
         let nsText = text as NSString
         let fullRange = NSRange(location: 0, length: nsText.length)
-        let matches = regex.matches(in: text, range: fullRange)
-        guard !matches.isEmpty else {
-            return Text(text).foregroundColor(baseColor)
+
+        if let urlRegex = try? NSRegularExpression(pattern: "https?://[^\\s]+") {
+            for match in urlRegex.matches(in: text, range: fullRange) {
+                guard let attrRange = Range(match.range, in: attributed) else { continue }
+                if let url = URL(string: nsText.substring(with: match.range)) {
+                    attributed[attrRange].link = url
+                    attributed[attrRange].underlineStyle = .single
+                }
+            }
         }
 
-        var result = Text("")
-        var cursor = 0
-        for match in matches {
-            guard match.range.location >= cursor else { continue }
-            if match.range.location > cursor {
-                let before = nsText.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
-                result = result + Text(before).foregroundColor(baseColor)
+        let trimmedQuery = searchQuery.trimmingCharacters(in: .whitespaces)
+        if !trimmedQuery.isEmpty,
+           let queryRegex = try? NSRegularExpression(
+               pattern: "\\b\(NSRegularExpression.escapedPattern(for: trimmedQuery))",
+               options: .caseInsensitive
+           ) {
+            for match in queryRegex.matches(in: text, range: fullRange) {
+                guard let attrRange = Range(match.range, in: attributed) else { continue }
+                attributed[attrRange].foregroundColor = .yellow
+                attributed[attrRange].font = .body.bold()
             }
-            let matched = nsText.substring(with: match.range)
-            result = result + Text(matched).bold().foregroundColor(.yellow)
-            cursor = match.range.location + match.range.length
         }
-        if cursor < nsText.length {
-            result = result + Text(nsText.substring(from: cursor)).foregroundColor(baseColor)
-        }
-        return result
+
+        return attributed
     }
 }
 
