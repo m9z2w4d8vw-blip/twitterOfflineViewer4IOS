@@ -12,6 +12,7 @@ struct LibraryView: View {
     @State private var renameTarget: ConversationMeta?
     @State private var renameText = ""
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
 
     // Same key SettingsView's "App Name" field writes to.
     @AppStorage("appDisplayName") private var appDisplayName: String = "mssgs"
@@ -57,12 +58,23 @@ struct LibraryView: View {
                         ProgressView()
                     } else {
                         HStack(spacing: 16) {
-                            Button {
-                                Task { await store.scanImportsFolder() }
+                            Menu {
+                                Button {
+                                    Task { await store.scanImportsFolder() }
+                                } label: {
+                                    Label("Check Drop Folder Now", systemImage: "arrow.clockwise")
+                                }
+                                Button {
+                                    if let url = store.dropFolderFilesAppURL {
+                                        openURL(url)
+                                    }
+                                } label: {
+                                    Label("Open Drop Folder in Files", systemImage: "folder")
+                                }
                             } label: {
                                 Image(systemName: "arrow.clockwise")
                             }
-                            .accessibilityLabel("Check the drop folder for new files")
+                            .accessibilityLabel("Drop folder options")
 
                             Button {
                                 showImporter = true
@@ -143,7 +155,7 @@ struct LibraryView: View {
         } description: {
             VStack(spacing: 10) {
                 Text("Open the Files app → On My iPhone → mssgs → \"Drop JSON Exports Here\", and copy an export .json file in. It's picked up automatically.")
-                Text("If Files doesn't show that folder, this is the exact path (usable directly in Filza or a similar tool):")
+                Text("If that folder doesn't show up under On My iPhone — a known gap on some installs, not specific to how you installed this app — the button below opens it directly instead.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(store.importsFolderPath)
@@ -154,9 +166,16 @@ struct LibraryView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
         } actions: {
-            HStack(spacing: 16) {
-                Button("Check now") { Task { await store.scanImportsFolder() } }
-                Button("Use file picker instead") { showImporter = true }
+            VStack(spacing: 10) {
+                Button("Open Drop Folder in Files") {
+                    if let url = store.dropFolderFilesAppURL {
+                        openURL(url)
+                    }
+                }
+                HStack(spacing: 16) {
+                    Button("Check now") { Task { await store.scanImportsFolder() } }
+                    Button("Use file picker instead") { showImporter = true }
+                }
             }
         }
     }
