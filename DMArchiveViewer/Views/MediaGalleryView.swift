@@ -57,18 +57,48 @@ struct MediaGalleryView: View {
 
     @ViewBuilder
     private func thumbnail(for item: MediaGalleryItem, side: CGFloat) -> some View {
+        GalleryThumbnailImage(src: item.dataUrl, side: side)
+            .contentShape(Rectangle())
+            .onTapGesture { onSelect(item.messageIndex) }
+    }
+}
+
+// Same embedded-or-linked handling as BubbleMediaThumbnail (see
+// MessageRowView.swift) — a grid cell just doesn't need to hand the
+// loaded UIImage anywhere on tap, since tapping always jumps to the
+// message regardless of whether its photo loaded.
+private struct GalleryThumbnailImage: View {
+    let src: String
+    let side: CGFloat
+
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    var body: some View {
         Group {
-            if let uiImage = UIImage(dataURLString: item.dataUrl) {
-                Image(uiImage: uiImage)
+            if let image {
+                Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: side, height: side)
                     .clipped()
+            } else if failed {
+                Color(.systemGray5)
+                    .frame(width: side, height: side)
+                    .overlay { Image(systemName: "photo.badge.exclamationmark").foregroundStyle(.secondary) }
             } else {
-                Color(.systemGray5).frame(width: side, height: side)
+                Color(.systemGray5)
+                    .frame(width: side, height: side)
+                    .overlay { ProgressView() }
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture { onSelect(item.messageIndex) }
+        .task(id: src) {
+            guard image == nil, !failed else { return }
+            if let loaded = await ArchiveMediaLoader.load(src) {
+                image = loaded
+            } else {
+                failed = true
+            }
+        }
     }
 }
